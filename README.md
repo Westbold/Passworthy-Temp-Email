@@ -16,11 +16,12 @@ AI-made web client: [https://driftz.net](https://driftz.net)
     *   [Project Setup](#project-setup)
     *   [Cloudflare Configuration](#cloudflare-configuration)
         *   [D1 Database Setup](#d1-database-setup)
-        *   [R2 Bucket Setup](#r2-bucket-setup)
         *   [Email Routing Setup](#email-routing-setup)
 *   [Running the Worker](#running-the-worker)
     *   [Cloudflare Information Script (Optional)](#cloudflare-information-script-optional)
     *   [Telegram Logging (Optional)](#telegram-logging-optional)
+    *   [Address Claims and Authorization](#address-claims-and-authorization)
+    *   [Webhook Forwarding (Optional)](#webhook-forwarding-optional)
     *   [Local Development](#local-development)
     *   [Deployment](#deployment)
 
@@ -30,10 +31,12 @@ AI-made web client: [https://driftz.net](https://driftz.net)
 
 *   Receives emails via Cloudflare Email Routing.
 *   Stores email data in a Cloudflare D1 database.
-*   **Attachment Support**: Stores email attachments up to 50MB in Cloudflare R2.
-*   Provides comprehensive API endpoints for emails and attachments.
-*   Automatically cleans up old emails and attachments.
-*   Supports multiple file types including documents, images, and archives.
+*   Lets users permanently claim supported email addresses with a bearer key.
+*   Discards inbound email for unclaimed addresses.
+*   Provides authorized API endpoints for email inbox management.
+*   Optionally forwards stored emails to a signed centralized webhook.
+*   Automatically cleans up old emails.
+*   Ignores incoming email attachments.
 
 ## Supporters
 
@@ -114,17 +117,6 @@ Before you begin, ensure you have following:
     bun run db:indexes
     ```
 
-#### R2 Bucket Setup
-
-1.  **Create** R2 Bucket**:
-    ```bash
-    bun run r2:create
-    ```
-2.  **Create Preview Bucket** (for development):
-    ```bash
-    bun run r2:create-preview
-    ```
-
 #### Email Routing Setup
 
 1.  **Go to your Cloudflare Dashboard**: Select your domain (`example.com`).
@@ -176,6 +168,74 @@ If you wish to enable Telegram logging for your worker, follow these steps:
     bun wrangler secret put TELEGRAM_CHAT_ID
     ```
 
+### Address Claims and Authorization
+
+Users must claim an address before it can receive email. The claim key is supplied as a bearer token:
+
+```text
+Authorization: Bearer YOUR_CLAIM_KEY
+```
+
+Claim an address:
+
+```http
+PUT /claims/recipient@barid.site
+Authorization: Bearer YOUR_CLAIM_KEY
+```
+
+Claims are permanent and do not expire. Calling the same claim endpoint again with the same bearer token is idempotent. Calling it with a different bearer token returns `409 Conflict`.
+
+All email and inbox endpoints require the same bearer token that claimed the recipient address. Requests with a missing token, unclaimed address, or mismatched token are denied.
+
+Release a claim and delete all stored email for that address:
+
+```http
+DELETE /claims/recipient@barid.site
+Authorization: Bearer YOUR_CLAIM_KEY
+```
+
+Inbound email for unclaimed addresses is discarded and is not stored or forwarded to the webhook. Webhook delivery is centralized and does not use per-address claim authorization.
+
+### Webhook Forwarding (Optional)
+
+Set `WEBHOOK_URL` and `WEBHOOK_SECRET` to forward every stored email to an external webhook. If either value is missing, webhook forwarding is disabled.
+
+For production, set both values as Worker secrets:
+
+```bash
+bun wrangler secret put WEBHOOK_URL
+bun wrangler secret put WEBHOOK_SECRET
+```
+
+For local development, add them to `.dev.vars`:
+
+```text
+WEBHOOK_URL="https://example.com/webhooks/temp-mail"
+WEBHOOK_SECRET="YOUR_SHARED_SECRET"
+```
+
+The Worker sends a `POST` request with `Content-Type: application/json` and this header:
+
+```text
+X-Webhook-Signature: HMAC-SHA512=<base64_hmac_sha512_of_body>
+```
+
+The signature is computed over the exact UTF-8 request body using `WEBHOOK_SECRET`. Webhook failures are logged but do not reject or delete the received email.
+
+Webhook body shape:
+
+```json
+{
+  "id": "usm2sw0qfv9a5ku9z4xmh8og",
+  "from_address": "sender@example.com",
+  "to_address": "recipient@barid.site",
+  "subject": "Welcome to our service",
+  "received_at": 1753317948,
+  "html_content": "<p>Hello world</p>",
+  "text_content": "Hello world"
+}
+```
+
 ### Local Development
 
 To run worker locally:
@@ -203,17 +263,12 @@ bun run deploy
 - `bun run db:create` - Create D1 database
 - `bun run db:tables` - Apply database schema
 - `bun run db:indexes` - Apply database indexes
-- `bun run db:migrate-attachments` - Add attachment support to existing database
-
-### Storage Setup
-- `bun run r2:create` - Create R2 bucket for attachments
-- `bun run r2:create-preview` - Create R2 preview bucket
 
 ### Code Quality
-- `bun run check` - Run all linting and formatting checks
-- `bun run lint` - Run ESLint
-- `bun run lint:fix` - Fix ESLint issues
-- `bun run format` - Format code with Prettier
+- `bun run check` - Run Biome checks
+- `bun run lint` - Run Biome linting
+- `bun run lint:fix` - Fix linting issues
+- `bun run format` - Format code with Biome
 - `bun run tsc` - Run TypeScript compiler
 
 ### Utilities
@@ -224,29 +279,16 @@ bun run deploy
 
 ### Email Endpoints
 
-- `GET /emails/{emailAddress}` - Get emails for a specific address
-- `GET /emails/count/{emailAddress}` - Get email count for a specific address
+- `PUT /claims/{emailAddress}` - Permanently claim a supported address with `Authorization: Bearer <key>`
+- `DELETE /claims/{emailAddress}` - Release a claim and delete all stored email for that address
+- `GET /emails/{emailAddress}` - Get emails for a claimed address
+- `GET /emails/count/{emailAddress}` - Get email count for a claimed address
 - `GET /inbox/{emailId}` - Get a specific email by ID
-- `DELETE /emails/{emailAddress}` - Delete all emails for a specific address
+- `DELETE /emails/{emailAddress}` - Delete all emails for a claimed address
 - `DELETE /inbox/{emailId}` - Delete a specific email by ID
 - `GET /domains` - Get list of supported domains
 
-### Attachment Endpoints
-
-- `GET /emails/{emailAddress}/attachments` - Get all attachments for emails sent to a specific address
-- `GET /inbox/{emailId}/attachments` - Get attachments for a specific email
-- `GET /attachments/{attachmentId}` - Download a specific attachment
-- `DELETE /attachments/{attachmentId}` - Delete a specific attachment
-
-### Attachment Features
-
-- **File Size Limit**: Up to 50MB per attachment
-- **File Count Limit**: Up to 10 attachments per email
-- **Supported File Types**:
-  - **Images**: JPEG, PNG, GIF, WebP, SVG
-  - **Documents**: PDF, TXT, CSV, Word, Excel, PowerPoint
-  - **Archives**: ZIP, RAR, 7Z
-  - **Other**: JSON, XML
+All claim, email, and inbox endpoints require `Authorization: Bearer <key>`. `/domains` and `/health` are public.
 
 ### Health Check
 

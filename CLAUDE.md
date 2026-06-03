@@ -1,11 +1,11 @@
 # Temp Mail Worker - Claude Code Instructions
 
-This repository is a **Cloudflare Workers-based temporary email service** that provides disposable email addresses with attachment support. The service receives emails via Cloudflare Email Routing, stores them in D1 database, and provides REST API endpoints for managing emails and attachments.
+This repository is a **Cloudflare Workers-based temporary email service** that provides claimed disposable email addresses. The service receives emails via Cloudflare Email Routing, stores email for claimed addresses in D1, discards email for unclaimed addresses, and provides authorized REST API endpoints for managing emails.
 
 ## Project Overview
 
 - **Type**: Cloudflare Worker + Hono Framework
-- **Purpose**: Temporary email service with attachment support
+- **Purpose**: Temporary email service
 - **Live API**: https://api.barid.site
 - **Web Client**: https://web.barid.site
 - **Runtime**: Cloudflare Workers (Edge Computing)
@@ -35,7 +35,6 @@ This repository is a **Cloudflare Workers-based temporary email service** that p
 
 ### Cloudflare Services
 - **D1 Database**: SQLite database for email storage
-- **R2 Storage**: Object storage for email attachments (up to 50MB)
 - **Email Routing**: Email receiving service
 - **Scheduled Functions**: Automated cleanup and reporting
 
@@ -50,7 +49,6 @@ src/
 │   └── domains.ts             # Supported email domains configuration
 ├── database/                  # Database interaction modules
 │   ├── d1.ts                  # D1 database operations
-│   └── r2.ts                  # R2 storage operations
 ├── handlers/                  # Event handlers
 │   ├── emailHandler.ts        # Email processing handler
 │   └── scheduledHandler.ts   # Scheduled task handlers
@@ -59,11 +57,9 @@ src/
 │   └── validateDomain.ts      # Domain validation middleware
 ├── routes/                    # API route definitions
 │   ├── emailRoutes.ts         # Email-related endpoints
-│   ├── attachmentRoutes.ts    # Attachment-related endpoints
 │   └── healthRoutes.ts        # Health check endpoint
 ├── schemas/                   # Zod schemas for validation
 │   ├── emails/                # Email-related schemas
-│   └── attachments/           # Attachment-related schemas
 └── utils/                     # Utility functions
     ├── docs.ts                # OpenAPI documentation setup
     ├── helpers.ts             # Helper functions
@@ -94,9 +90,6 @@ cloudflare-info/               # Cloudflare information utility
 - `bun run db:indexes` - Apply database indexes
 
 ### Storage Setup
-- `bun run r2:create` - Create R2 bucket for attachments
-- `bun run r2:create-preview` - Create R2 preview bucket
-
 ### Code Quality
 - `bun run check` - Run all linting and formatting checks
 - `bun run lint` - Run Biome linter
@@ -113,20 +106,17 @@ cloudflare-info/               # Cloudflare information utility
 
 ### Email Service
 - **Multiple Domains**: Supports 9+ donated domains (barid.site, vwh.sh, etc.)
+- **Address Claims**: Users permanently claim addresses with an `Authorization: Bearer <key>` token
 - **Email Storage**: Stores emails in D1 database with full content
 - **HTML Processing**: Converts HTML emails to text with size limits
+- **Webhook Forwarding**: Optionally forwards stored emails to a signed centralized webhook
 - **Automatic Cleanup**: Scheduled deletion of old emails (3-hour retention)
-
-### Attachment Support
-- **File Size**: Up to 50MB per attachment
-- **File Count**: Up to 10 attachments per email
-- **Supported Types**: Images, documents, archives, databases, and more
-- **Storage**: Cloudflare R2 for reliable object storage
+- **Attachment Handling**: Incoming attachments are ignored and not stored
 
 ### API Endpoints
 - RESTful API with OpenAPI documentation
-- Email management (list, get, delete)
-- Attachment handling (upload, download, delete)
+- Address claims (claim, release)
+- Authorized email management (list, get, delete)
 - Health check endpoint
 - Domain listing endpoint
 
@@ -146,7 +136,7 @@ cloudflare-info/               # Cloudflare information utility
 ### Cloudflare-Native
 - **Edge Computing**: Runs on Cloudflare's edge network
 - **Serverless**: No server management required
-- **Multi-Service Integration**: Uses D1, R2, Email Routing, and Scheduled Functions
+- **Multi-Service Integration**: Uses D1, Email Routing, and Scheduled Functions
 
 ### Configuration Management
 - **Environment-Based**: Different configs for dev/preview/production
@@ -173,10 +163,6 @@ bun run db:create
 bun run db:tables
 bun run db:indexes
 
-# Set up storage
-bun run r2:create
-bun run r2:create-preview
-
 # Run locally
 bun run dev
 
@@ -191,10 +177,11 @@ bun run deploy
 - `HOURS_TO_DELETE_D1`: Email retention period (default: 3 hours)
 - `TELEGRAM_BOT_TOKEN`: Telegram bot token (secret)
 - `TELEGRAM_CHAT_ID`: Telegram chat ID for logging (secret)
+- `WEBHOOK_URL`: Optional centralized webhook URL for stored emails
+- `WEBHOOK_SECRET`: Optional shared secret for webhook HMAC-SHA512 signatures
 
 ### Cloudflare Bindings
-- **D1**: Database binding for email storage
-- **R2**: Object storage for attachments
+- **D1**: Database binding for address claims and email storage
 - **Scheduled**: Cron job triggers for cleanup
 
 ### Development Tips

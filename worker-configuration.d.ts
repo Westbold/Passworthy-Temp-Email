@@ -4,13 +4,14 @@
 declare namespace Cloudflare {
 	interface Env {
 		KV: KVNamespace;
-		R2: R2Bucket;
 		TELEGRAM_LOG_ENABLE: true;
 		HOURS_TO_DELETE_D1: 4;
 		TELEGRAM_BOT_TOKEN: string;
 		TELEGRAM_CHAT_ID: string;
 		CLOUDFLARE_ACCOUNT_ID: string;
 		CLOUDFLARE_API_TOKEN: string;
+		WEBHOOK_URL?: string;
+		WEBHOOK_SECRET?: string;
 		D1: D1Database;
 	}
 }

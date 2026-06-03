@@ -73,14 +73,6 @@ export const emailSchema = z
 			description: "The plain text content of the email.",
 			example: "Hello world",
 		}),
-		has_attachments: z.boolean().default(false).openapi({
-			description: "Whether the email has attachments.",
-			example: true,
-		}),
-		attachment_count: z.number().default(0).openapi({
-			description: "The number of attachments in the email.",
-			example: 2,
-		}),
 	})
 	.openapi("Email");
 
@@ -105,14 +97,6 @@ export const emailSummarySchema = z
 		received_at: z.number().openapi({
 			description: "The timestamp when the email was received (Unix epoch).",
 			example: 1753317948,
-		}),
-		has_attachments: z.boolean().default(false).openapi({
-			description: "Whether the email has attachments.",
-			example: true,
-		}),
-		attachment_count: z.number().default(0).openapi({
-			description: "The number of attachments in the email.",
-			example: 2,
 		}),
 	})
 	.openapi("EmailSummary");
@@ -209,6 +193,44 @@ export const emailsDeleteSuccessResponseSchema = z
 		}),
 	})
 	.openapi("DeleteEmailsSuccessResponse");
+
+export const claimSuccessResponseSchema = z
+	.object({
+		success: z.literal(true).openapi({
+			description: "Indicates that the request was successful.",
+			example: true,
+		}),
+		result: z.object({
+			message: z.literal("Address claimed successfully").openapi({
+				description: "A message indicating that the address was claimed.",
+				example: "Address claimed successfully",
+			}),
+			email_address: z.string().openapi({
+				description: "The claimed email address.",
+				example: "recipient@barid.site",
+			}),
+		}),
+	})
+	.openapi("ClaimSuccessResponse");
+
+export const claimReleaseSuccessResponseSchema = z
+	.object({
+		success: z.literal(true).openapi({
+			description: "Indicates that the request was successful.",
+			example: true,
+		}),
+		result: z.object({
+			message: z.literal("Claim released successfully").openapi({
+				description: "A message indicating that the address claim was released.",
+				example: "Claim released successfully",
+			}),
+			deleted_count: z.number().openapi({
+				description: "The number of emails deleted with the released claim.",
+				example: 2,
+			}),
+		}),
+	})
+	.openapi("ClaimReleaseSuccessResponse");
 
 export const emailDeleteSuccessResponseSchema = z
 	.object({

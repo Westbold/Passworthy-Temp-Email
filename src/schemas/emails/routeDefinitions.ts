@@ -1,5 +1,7 @@
 import { createRoute } from "@hono/zod-openapi";
 import {
+	claimReleaseSuccessResponseSchema,
+	claimSuccessResponseSchema,
 	domainErrorResponseSchema,
 	domainsSuccessResponseSchema,
 	emailAddressParamSchema,
@@ -10,14 +12,112 @@ import {
 	emailQuerySchema,
 	emailsCountSuccessResponseSchema,
 	emailsDeleteSuccessResponseSchema,
+	errorResponseSchema,
 	notFoundErrorResponseSchema,
 	validationErrorResponseSchema,
 } from "./index";
+
+const bearerSecurity = [{ bearerAuth: [] }];
+const errorJson = {
+	"application/json": {
+		schema: errorResponseSchema,
+	},
+};
+const unauthorizedResponse = {
+	content: errorJson,
+	description: "Missing or invalid Authorization bearer token",
+};
+const forbiddenResponse = {
+	content: errorJson,
+	description: "Authorization bearer token does not match the address claim",
+};
+
+// Claim address route
+export const claimAddressRoute = createRoute({
+	method: "put",
+	path: "/claims/{emailAddress}",
+	security: bearerSecurity,
+	request: {
+		params: emailAddressParamSchema,
+	},
+	responses: {
+		200: {
+			content: {
+				"application/json": {
+					schema: claimSuccessResponseSchema,
+				},
+			},
+			description: "Address claimed successfully",
+		},
+		400: {
+			content: {
+				"application/json": {
+					schema: validationErrorResponseSchema,
+				},
+			},
+			description: "Validation error - invalid email format",
+		},
+		401: unauthorizedResponse,
+		404: {
+			content: {
+				"application/json": {
+					schema: domainErrorResponseSchema,
+				},
+			},
+			description: "Domain not supported - returns list of supported domains",
+		},
+		409: {
+			content: errorJson,
+			description: "Address already claimed by a different bearer token",
+		},
+	},
+	tags: ["Claims"],
+	summary: "Claim address",
+	description: "Permanently claim an email address with the Authorization bearer key.",
+});
+
+// Release address claim route
+export const releaseAddressClaimRoute = createRoute({
+	method: "delete",
+	path: "/claims/{emailAddress}",
+	security: bearerSecurity,
+	request: {
+		params: emailAddressParamSchema,
+	},
+	responses: {
+		200: {
+			content: {
+				"application/json": {
+					schema: claimReleaseSuccessResponseSchema,
+				},
+			},
+			description: "Claim released successfully",
+		},
+		400: {
+			content: {
+				"application/json": {
+					schema: validationErrorResponseSchema,
+				},
+			},
+			description: "Validation error - invalid email format",
+		},
+		401: unauthorizedResponse,
+		403: forbiddenResponse,
+		404: {
+			content: errorJson,
+			description: "Domain not supported or claim not found",
+		},
+	},
+	tags: ["Claims"],
+	summary: "Release address claim",
+	description: "Release an email address claim and delete all emails for that address.",
+});
 
 // Get emails route
 export const getEmailsRoute = createRoute({
 	method: "get",
 	path: "/emails/{emailAddress}",
+	security: bearerSecurity,
 	request: {
 		params: emailAddressParamSchema,
 		query: emailQuerySchema,
@@ -31,13 +131,11 @@ export const getEmailsRoute = createRoute({
 			},
 			description: "Successfully retrieved emails for the specified address",
 		},
+		401: unauthorizedResponse,
+		403: forbiddenResponse,
 		404: {
-			content: {
-				"application/json": {
-					schema: domainErrorResponseSchema,
-				},
-			},
-			description: "Domain not supported - returns list of supported domains",
+			content: errorJson,
+			description: "Domain not supported or claim not found",
 		},
 		400: {
 			content: {
@@ -50,13 +148,15 @@ export const getEmailsRoute = createRoute({
 	},
 	tags: ["Emails"],
 	summary: "Get emails",
-	description: "Retrieve all emails for a specific email address with pagination.",
+	description:
+		"Retrieve all emails for a claimed email address with the matching Authorization bearer token.",
 });
 
 // Get emails count route
 export const getEmailsCountRoute = createRoute({
 	method: "get",
 	path: "/emails/count/{emailAddress}",
+	security: bearerSecurity,
 	request: {
 		params: emailAddressParamSchema,
 	},
@@ -69,13 +169,11 @@ export const getEmailsCountRoute = createRoute({
 			},
 			description: "Successfully retrieved the count of emails for the specified address",
 		},
+		401: unauthorizedResponse,
+		403: forbiddenResponse,
 		404: {
-			content: {
-				"application/json": {
-					schema: domainErrorResponseSchema,
-				},
-			},
-			description: "Domain not supported - returns list of supported domains",
+			content: errorJson,
+			description: "Domain not supported or claim not found",
 		},
 		400: {
 			content: {
@@ -88,13 +186,15 @@ export const getEmailsCountRoute = createRoute({
 	},
 	tags: ["Emails"],
 	summary: "Get email count",
-	description: "Retrieve the total number of emails for a specific email address.",
+	description:
+		"Retrieve the total number of emails for a claimed email address with the matching Authorization bearer token.",
 });
 
 // Delete emails route
 export const deleteEmailsRoute = createRoute({
 	method: "delete",
 	path: "/emails/{emailAddress}",
+	security: bearerSecurity,
 	request: {
 		params: emailAddressParamSchema,
 	},
@@ -107,6 +207,12 @@ export const deleteEmailsRoute = createRoute({
 			},
 			description: "Successfully deleted all emails for the address",
 		},
+		401: unauthorizedResponse,
+		403: forbiddenResponse,
+		404: {
+			content: errorJson,
+			description: "Domain not supported, claim not found, or no emails found",
+		},
 		400: {
 			content: {
 				"application/json": {
@@ -118,13 +224,15 @@ export const deleteEmailsRoute = createRoute({
 	},
 	tags: ["Emails"],
 	summary: "Delete all emails",
-	description: "Delete all emails associated with the specified email address",
+	description:
+		"Delete all emails associated with a claimed email address using the matching Authorization bearer token",
 });
 
 // Get single email route
 export const getEmailRoute = createRoute({
 	method: "get",
 	path: "/inbox/{emailId}",
+	security: bearerSecurity,
 	request: {
 		params: emailIdParamSchema,
 	},
@@ -137,6 +245,8 @@ export const getEmailRoute = createRoute({
 			},
 			description: "Successfully retrieved email details",
 		},
+		401: unauthorizedResponse,
+		403: forbiddenResponse,
 		404: {
 			content: {
 				"application/json": {
@@ -156,13 +266,15 @@ export const getEmailRoute = createRoute({
 	},
 	tags: ["Inbox"],
 	summary: "Get email inbox",
-	description: "Retrieve full email content including HTML and text by email ID",
+	description:
+		"Retrieve full email content by email ID using the matching Authorization bearer token for the recipient claim",
 });
 
 // Delete single email route
 export const deleteEmailRoute = createRoute({
 	method: "delete",
 	path: "/inbox/{emailId}",
+	security: bearerSecurity,
 	request: {
 		params: emailIdParamSchema,
 	},
@@ -175,6 +287,8 @@ export const deleteEmailRoute = createRoute({
 			},
 			description: "Successfully deleted the email",
 		},
+		401: unauthorizedResponse,
+		403: forbiddenResponse,
 		404: {
 			content: {
 				"application/json": {
@@ -194,7 +308,8 @@ export const deleteEmailRoute = createRoute({
 	},
 	tags: ["Inbox"],
 	summary: "Delete email inbox",
-	description: "Delete a specific inbox by its email ID",
+	description:
+		"Delete a specific inbox by its email ID using the matching Authorization bearer token for the recipient claim",
 });
 
 // Get domains route

@@ -5,5 +5,4 @@ export function createDatabaseService(db: D1Database) {
 }
 
 export * from "./d1";
-export * from "./r2";
 export * from "./service";

@@ -4,6 +4,12 @@ import { Scalar } from "@scalar/hono-api-reference";
 import { DOMAINS_SET } from "@/config/domains";
 
 export function setupDocumentation(app: OpenAPIHono<{ Bindings: CloudflareBindings }>) {
+	app.openAPIRegistry.registerComponent("securitySchemes", "bearerAuth", {
+		type: "http",
+		scheme: "bearer",
+		description: "Address claim authorization key",
+	});
+
 	// OpenAPI Documentation
 	app.doc("/openapi.json", {
 		openapi: "3.0.0",
@@ -13,14 +19,21 @@ export function setupDocumentation(app: OpenAPIHono<{ Bindings: CloudflareBindin
 			description: `
 # Temporary Email Service API
 
-A simple and fast temporary email service that allows you to receive emails without registration.
+A simple and fast temporary email service for permanently claimed disposable addresses.
 
 ## Features
-- Receive emails on temporary addresses
+- Permanently claim supported email addresses
+- Discard inbound email for unclaimed addresses
 - Multiple supported domains
-- Real-time email retrieval
-- No registration required
+- Authorized email retrieval and deletion
+- Signed centralized webhook forwarding
 - Automatic cleanup
+
+## Authorization
+Claim and email endpoints require \`Authorization: Bearer <key>\`. Claim an address with
+\`PUT /claims/{emailAddress}\`; every later email request for that address must use the same
+bearer key. Use \`DELETE /claims/{emailAddress}\` with the same key to release the claim and
+delete all stored email for that address.
 
 ## Response Format
 - **Success responses** include \`success: true\` and a \`result\` field
@@ -53,12 +66,16 @@ ${`\n${Array.from(DOMAINS_SET)
 		],
 		tags: [
 			{
+				name: "Claims",
+				description: "Operations for claiming and releasing email addresses",
+			},
+			{
 				name: "Emails",
-				description: "Operations for managing emails by email address",
+				description: "Authorized operations for managing emails by claimed email address",
 			},
 			{
 				name: "Inbox",
-				description: "Operations for individual email messages",
+				description: "Authorized operations for individual email messages",
 			},
 			{
 				name: "Domains",
